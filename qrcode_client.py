@@ -58,13 +58,11 @@ df_today = [r for r in df_rows if r["Date"] == date_str]
 
 # Détecte si arrivée ou sortie
 if not df_today or not df_today[-1]["Heure arrivée"] or df_today[-1]["Heure sortie"]:
-    # Nouvelle arrivée
     reponse = ajouter_pointage(date_str, heure_arrivee=heure_str)
     msg = f"🧹 {NOM_PERSONNE} a commencé le travail à {heure_str} le {date_str}."
     send_telegram(msg)
     st.success("🟢 Début du travail enregistré !")
 elif df_today[-1]["Heure arrivée"] and not df_today[-1]["Heure sortie"]:
-    # On complète la sortie
     reponse = ajouter_pointage(date_str, heure_sortie=heure_str)
     msg = f"🧹 {NOM_PERSONNE} a terminé le travail à {heure_str} le {date_str}."
     send_telegram(msg)

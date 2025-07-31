@@ -34,12 +34,24 @@ else:
     periode = st.selectbox("Période :", ["Cette semaine", "Ce mois", "Tout"], key="periode_suivi_unique_1")
     now = datetime.now()
 
+    def safe_week(d):
+        try:
+            return datetime.strptime(d, "%Y-%m-%d").isocalendar().week
+        except Exception:
+            return -1
+
+    def safe_month(d):
+        try:
+            return datetime.strptime(d, "%Y-%m-%d").month
+        except Exception:
+            return -1
+
     if periode == "Cette semaine":
         semaine = now.isocalendar().week
-        recap = df[df["Date"].apply(lambda d: datetime.strptime(d, "%Y-%m-%d").isocalendar().week) == semaine]
+        recap = df[df["Date"].apply(safe_week) == semaine]
     elif periode == "Ce mois":
         mois = now.month
-        recap = df[df["Date"].apply(lambda d: datetime.strptime(d, "%Y-%m-%d").month) == mois]
+        recap = df[df["Date"].apply(safe_month) == mois]
     else:
         recap = df
 
@@ -63,4 +75,3 @@ else:
         )
     else:
         st.info("Aucun pointage pour cette période.")
-
