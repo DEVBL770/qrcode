@@ -42,9 +42,11 @@ def charger_df():
 def ajouter_pointage(date, heure_arrivee=None, heure_sortie=None):
     payload = {"Date": date, "Heure arrivée": heure_arrivee, "Heure sortie": heure_sortie}
     try:
-        requests.post(GOOGLE_APPS_SCRIPT_URL, json=payload, timeout=10)
+        r = requests.post(GOOGLE_APPS_SCRIPT_URL, json=payload, timeout=10)
+        return r.text
     except Exception as e:
         st.error(f"Erreur d'envoi : {e}")
+        return None
 
 now = datetime.now()
 date_str = now.strftime("%Y-%m-%d")
@@ -54,15 +56,20 @@ columns, rows = charger_df()
 df_rows = [dict(zip(columns, row)) for row in rows] if columns else []
 df_today = [r for r in df_rows if r["Date"] == date_str]
 
-if not df_today or not df_today[-1]["Heure sortie"]:
-    ajouter_pointage(date_str, heure_arrivee=heure_str)
+# Détecte si arrivée ou sortie
+if not df_today or not df_today[-1]["Heure arrivée"] or df_today[-1]["Heure sortie"]:
+    # Nouvelle arrivée
+    reponse = ajouter_pointage(date_str, heure_arrivee=heure_str)
     msg = f"🧹 {NOM_PERSONNE} a commencé le travail à {heure_str} le {date_str}."
     send_telegram(msg)
     st.success("🟢 Début du travail enregistré !")
-else:
-    ajouter_pointage(date_str, heure_sortie=heure_str)
+elif df_today[-1]["Heure arrivée"] and not df_today[-1]["Heure sortie"]:
+    # On complète la sortie
+    reponse = ajouter_pointage(date_str, heure_sortie=heure_str)
     msg = f"🧹 {NOM_PERSONNE} a terminé le travail à {heure_str} le {date_str}."
     send_telegram(msg)
     st.success("✅ Fin du travail enregistrée !")
+else:
+    st.warning("Action inattendue, réessayez.")
 
 st.stop()
