@@ -1,33 +1,14 @@
 import streamlit as st
-import pandas as pd
 from datetime import datetime
 import requests
-import os
 
-# PARAMÈTRES
+GOOGLE_APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxZLi0wYP3DEVTPbGDxw4czSVaeaAGbYT07iEzIH3iC6txqp1lqv6Ab7Jy-oIv2v1TTNg/exec"
+
 TELEGRAM_BOT_TOKEN = "8485390899:AAF1Qd6ISc7MIHIWUs4FZrseFCboIdkWof0"
 TELEGRAM_CHAT_ID = "402634505"
-CSV_FILENAME = "pointage_femme_menage.csv"
 NOM_PERSONNE = "Femme de ménage"
 
-def send_telegram(message):
-    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-    data = {"chat_id": TELEGRAM_CHAT_ID, "text": message}
-    try:
-        requests.post(url, data=data)
-    except:
-        pass
-
-def charger_df():
-    if os.path.exists(CSV_FILENAME):
-        return pd.read_csv(CSV_FILENAME)
-    else:
-        return pd.DataFrame(columns=["Date", "Heure arrivée", "Heure sortie"])
-
-def sauvegarder_df(df):
-    df.to_csv(CSV_FILENAME, index=False)
-
-st.set_page_config(page_title="Pointage travail", page_icon="🧹", layout="centered")
+st.set_page_config(page_title="Scan", page_icon="🧹")
 hide_menu = """
 <style>
 #MainMenu {visibility: hidden;}
@@ -37,30 +18,51 @@ header {visibility: hidden;}
 """
 st.markdown(hide_menu, unsafe_allow_html=True)
 
+def send_telegram(message):
+    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+    data = {"chat_id": TELEGRAM_CHAT_ID, "text": message}
+    try:
+        requests.post(url, data=data, timeout=5)
+    except Exception as e:
+        st.warning(f"Erreur Telegram : {e}")
+
+def charger_df():
+    try:
+        resp = requests.get(GOOGLE_APPS_SCRIPT_URL, timeout=10)
+        data = resp.json()
+        if not data or len(data) < 2:
+            return []
+        columns = data[0]
+        rows = data[1:]
+        return columns, rows
+    except Exception as e:
+        st.error(f"Erreur de connexion à la feuille Google Sheets : {e}")
+        return [], []
+
+def ajouter_pointage(date, heure_arrivee=None, heure_sortie=None):
+    payload = {"Date": date, "Heure arrivée": heure_arrivee, "Heure sortie": heure_sortie}
+    try:
+        requests.post(GOOGLE_APPS_SCRIPT_URL, json=payload, timeout=10)
+    except Exception as e:
+        st.error(f"Erreur d'envoi : {e}")
+
 now = datetime.now()
 date_str = now.strftime("%Y-%m-%d")
 heure_str = now.strftime("%H:%M:%S")
 
-df = charger_df()
+columns, rows = charger_df()
+df_rows = [dict(zip(columns, row)) for row in rows] if columns else []
+df_today = [r for r in df_rows if r["Date"] == date_str]
 
-mask_today = df["Date"] == date_str
-
-if mask_today.any() and pd.isna(df.loc[mask_today, "Heure sortie"].iloc[-1]):
-    # Si arrivée sans sortie : c'est la sortie
-    idx = df[mask_today & df["Heure sortie"].isna()].index[-1]
-    df.at[idx, "Heure sortie"] = heure_str
-    sauvegarder_df(df)
-    msg = f"🧹 {NOM_PERSONNE} a terminé son travail à {heure_str} le {date_str}."
-    send_telegram(msg)
-    st.success("✅ Fin du travail enregistrée !\n\nMerci et bonne journée.")
-else:
-    # Sinon, c'est une arrivée
-    new_row = {"Date": date_str, "Heure arrivée": heure_str, "Heure sortie": None}
-    df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
-    sauvegarder_df(df)
+if not df_today or not df_today[-1]["Heure sortie"]:
+    ajouter_pointage(date_str, heure_arrivee=heure_str)
     msg = f"🧹 {NOM_PERSONNE} a commencé le travail à {heure_str} le {date_str}."
     send_telegram(msg)
-    st.success("🟢 Début du travail enregistré !\n\nBonne journée !")
+    st.success("🟢 Début du travail enregistré !")
+else:
+    ajouter_pointage(date_str, heure_sortie=heure_str)
+    msg = f"🧹 {NOM_PERSONNE} a terminé le travail à {heure_str} le {date_str}."
+    send_telegram(msg)
+    st.success("✅ Fin du travail enregistrée !")
 
-# On masque tout le reste, elle ne voit que le popup (success)
 st.stop()
